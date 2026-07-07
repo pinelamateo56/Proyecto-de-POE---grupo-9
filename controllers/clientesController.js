@@ -2,7 +2,9 @@ const pool = require('../config/db');
 
 exports.listar = async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM clientes ORDER BY id_cliente');
+    const result = await pool.query(
+      "SELECT * FROM clientes WHERE estado = TRUE AND cedula != '0000000000' ORDER BY id_cliente"
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -68,13 +70,13 @@ exports.eliminar = async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'DELETE FROM clientes WHERE id_cliente = $1 RETURNING *',
+      'UPDATE clientes SET estado = FALSE WHERE id_cliente = $1 AND estado = TRUE RETURNING *',
       [id]
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Cliente no encontrado' });
+      return res.status(404).json({ error: 'Cliente no encontrado o ya está desactivado' });
     }
-    res.json({ message: 'Cliente eliminado exitosamente' });
+    res.json({ message: 'Cliente desactivado exitosamente' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
