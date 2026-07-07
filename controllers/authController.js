@@ -13,7 +13,7 @@ exports.login = async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT id_usuario, username, password_hash, rol FROM usuarios WHERE username = $1',
+      'SELECT id_usuario, username, password_hash, rol, activo FROM usuarios WHERE username = $1',
       [username]
     );
 
@@ -22,6 +22,11 @@ exports.login = async (req, res) => {
     }
 
     const usuario = result.rows[0];
+
+    if (usuario.activo === false) {
+      return res.status(403).json({ error: 'Usuario deshabilitado. Contacte al administrador.' });
+    }
+
     const validPassword = await bcrypt.compare(password, usuario.password_hash);
 
     if (!validPassword) {
@@ -105,7 +110,7 @@ exports.obtenerPerfil = async (req, res) => {
 exports.listar = async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id_usuario, username, rol, fecha_creacion FROM usuarios ORDER BY id_usuario'
+      'SELECT id_usuario, username, rol, fecha_creacion, activo FROM usuarios WHERE activo = TRUE ORDER BY id_usuario'
     );
     res.json(result.rows);
   } catch (err) {
@@ -113,12 +118,23 @@ exports.listar = async (req, res) => {
   }
 };
 
-exports.eliminar = async (req, res) => {
+exports.listarInactivos = async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id_usuario, username, rol, fecha_creacion, activo FROM usuarios WHERE activo = FALSE ORDER BY id_usuario'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al listar usuarios inactivos' });
+  }
+};
+
+exports.reactivar = async (req, res) => {
   try {
     const { id } = req.params;
 
     const result = await pool.query(
-      'DELETE FROM usuarios WHERE id_usuario = $1 RETURNING id_usuario',
+      'UPDATE usuarios SET activo = TRUE WHERE id_usuario = $1 RETURNING id_usuario, username, rol',
       [id]
     );
 
@@ -126,8 +142,31 @@ exports.eliminar = async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    res.json({ message: 'Usuario eliminado exitosamente' });
+    res.json({ message: 'Usuario reactivado exitosamente', usuario: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: 'Error al eliminar usuario' });
+    res.status(500).json({ error: 'Error al reactivar usuario' });
+  }
+};
+
+exports.eliminar = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (parseInt(id) === req.user.id_usuario) {
+      return res.status(400).json({ error: 'No puede desactivarse a sí mismo' });
+    }
+
+    const result = await pool.query(
+      'UPDATE usuarios SET activo = FALSE WHERE id_usuario = $1 AND activo = TRUE RETURNING id_usuario',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado o ya está desactivado' });
+    }
+
+    res.json({ message: 'Usuario desactivado exitosamente' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al desactivar usuario' });
   }
 };
